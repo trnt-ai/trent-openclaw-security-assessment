@@ -4,6 +4,10 @@
 """Tests for the stdlib Trent API client header-inspection logic."""
 
 import io
+import json
+import os
+import stat
+import tempfile
 import urllib.error
 from unittest.mock import MagicMock, patch
 
@@ -250,6 +254,89 @@ class TestChatExpirationWarning:
             result = trent_client.chat("hi", output_file=str(out_file))
         assert result["error"] is True
         assert "expiration_warning" not in result
+
+
+class TestChatDefaultOutputFile:
+    def _sse_response(self):
+        resp = MagicMock()
+        resp.__iter__.return_value = iter([b'data: {"content": "hello"}\n', b"data: [DONE]\n"])
+        resp.headers = {}
+        resp.__enter__.return_value = resp
+        resp.__exit__.return_value = False
+        return resp
+
+    def test_default_output_file_is_created_atomically(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+        def _refuse_mktemp(*args, **kwargs):
+            raise AssertionError("tempfile.mktemp names a file without creating it")
+
+        monkeypatch.setattr(tempfile, "mktemp", _refuse_mktemp)
+        with patch("urllib.request.urlopen", return_value=self._sse_response()):
+            result = trent_client.chat("hi")
+
+        out_path = result["output_file"]
+        assert os.path.dirname(out_path) == str(tmp_path)
+        assert os.path.basename(out_path).startswith("trent_chat_")
+        assert out_path.endswith(".json")
+        assert stat.S_IMODE(os.stat(out_path).st_mode) == 0o600
+        with open(out_path) as f:
+            assert json.load(f) == {"content": "hello", "thread_id": None}
+
+    def test_a_request_that_fails_before_streaming_leaves_no_file(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+        err = urllib.error.HTTPError(
+            url="https://chat.trent.ai/v1/chat",
+            code=401,
+            msg="Unauthorized",
+            hdrs={},  # type: ignore[arg-type]
+            fp=io.BytesIO(b"unauthorized"),
+        )
+        err.headers = {}  # type: ignore[assignment]
+        with patch("urllib.request.urlopen", side_effect=err):
+            result = trent_client.chat("hi")
+        assert result["error"] is True
+        assert list(tmp_path.iterdir()) == []
+
+    def test_a_stream_that_breaks_keeps_its_partial_output(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+        def _lines():
+            yield b'data: {"content": "hello"}\n'
+            raise ConnectionResetError("peer went away")
+
+        resp = self._sse_response()
+        resp.__iter__.side_effect = lambda: _lines()
+        with patch("urllib.request.urlopen", return_value=resp):
+            result = trent_client.chat("hi")
+        assert result["error"] is True
+        with open(result["output_file"]) as f:
+            assert f.read() == "hello"
+
+    def test_a_failed_first_write_leaves_no_file(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+        class _FullDisk(io.StringIO):
+            def write(self, s):
+                raise OSError("No space left on device")
+
+        monkeypatch.setattr(trent_client, "open", lambda *a, **k: _FullDisk(), raising=False)
+        with patch("urllib.request.urlopen", return_value=self._sse_response()):
+            result = trent_client.chat("hi")
+        assert result["error"] is True
+        assert list(tmp_path.iterdir()) == []
+
+    def test_caller_output_file_is_used_as_given(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        out_file = tmp_path / "mine.json"
+        with patch("urllib.request.urlopen", return_value=self._sse_response()):
+            result = trent_client.chat("hi", output_file=str(out_file))
+        assert result["output_file"] == str(out_file)
+        assert json.loads(out_file.read_text())["content"] == "hello"
 
 
 if __name__ == "__main__":
