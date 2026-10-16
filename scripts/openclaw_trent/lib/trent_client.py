@@ -176,6 +176,16 @@ def chat(
     returned_thread_id: str | None = thread_id
     expiration_warning: str | None = None
 
+    def _drop_unused_output() -> None:
+        # A failure before anything streamed must not leave an empty file behind;
+        # partial output from a failure mid-stream is kept, as is a caller's file.
+        if output_file or content_chunks:
+            return
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
+
     try:
         with urllib.request.urlopen(req, timeout=300) as resp, open(out_path, "w") as out:
             expiration_warning = _extract_expiration_warning(resp.headers)
@@ -220,6 +230,7 @@ def chat(
         except Exception:
             pass
         error_warning = _extract_expiration_warning(getattr(e, "headers", None))
+        _drop_unused_output()
         if e.code == 401:
             result = {
                 "content": "API key rejected (expired or revoked). "
@@ -236,6 +247,7 @@ def chat(
         return result
 
     except TimeoutError:
+        _drop_unused_output()
         return {
             "content": "Request timed out. Please try again.",
             "error": True,
@@ -243,6 +255,7 @@ def chat(
         }
 
     except Exception as e:
+        _drop_unused_output()
         return {"content": f"An error occurred: {e}", "error": True, "output_file": out_path}
 
     result = {

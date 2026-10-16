@@ -284,6 +284,38 @@ class TestChatDefaultOutputFile:
         with open(out_path) as f:
             assert json.load(f) == {"content": "hello", "thread_id": None}
 
+    def test_a_request_that_fails_before_streaming_leaves_no_file(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+        err = urllib.error.HTTPError(
+            url="https://chat.trent.ai/v1/chat",
+            code=401,
+            msg="Unauthorized",
+            hdrs={},  # type: ignore[arg-type]
+            fp=io.BytesIO(b"unauthorized"),
+        )
+        err.headers = {}  # type: ignore[assignment]
+        with patch("urllib.request.urlopen", side_effect=err):
+            result = trent_client.chat("hi")
+        assert result["error"] is True
+        assert list(tmp_path.iterdir()) == []
+
+    def test_a_stream_that_breaks_keeps_its_partial_output(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+        def _lines():
+            yield b'data: {"content": "hello"}\n'
+            raise ConnectionResetError("peer went away")
+
+        resp = self._sse_response()
+        resp.__iter__.side_effect = lambda: _lines()
+        with patch("urllib.request.urlopen", return_value=resp):
+            result = trent_client.chat("hi")
+        assert result["error"] is True
+        with open(result["output_file"]) as f:
+            assert f.read() == "hello"
+
     def test_caller_output_file_is_used_as_given(self, monkeypatch, tmp_path):
         monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
         out_file = tmp_path / "mine.json"
