@@ -177,12 +177,13 @@ def chat(
     expiration_warning: str | None = None
 
     def _drop_unused_output() -> None:
-        # A failure before anything streamed must not leave an empty file behind;
+        # A failure before anything was written must not leave an empty file behind;
         # partial output from a failure mid-stream is kept, as is a caller's file.
-        if output_file or content_chunks:
+        if output_file:
             return
         try:
-            os.unlink(out_path)
+            if os.path.getsize(out_path) == 0:
+                os.unlink(out_path)
         except OSError:
             pass
 

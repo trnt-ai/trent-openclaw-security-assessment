@@ -316,6 +316,20 @@ class TestChatDefaultOutputFile:
         with open(result["output_file"]) as f:
             assert f.read() == "hello"
 
+    def test_a_failed_first_write_leaves_no_file(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+        class _FullDisk(io.StringIO):
+            def write(self, s):
+                raise OSError("No space left on device")
+
+        monkeypatch.setattr(trent_client, "open", lambda *a, **k: _FullDisk(), raising=False)
+        with patch("urllib.request.urlopen", return_value=self._sse_response()):
+            result = trent_client.chat("hi")
+        assert result["error"] is True
+        assert list(tmp_path.iterdir()) == []
+
     def test_caller_output_file_is_used_as_given(self, monkeypatch, tmp_path):
         monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
         out_file = tmp_path / "mine.json"
