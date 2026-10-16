@@ -165,7 +165,13 @@ def chat(
     )
 
     # Write chunks to a file as they arrive — survives sandbox SIGTERM
-    out_path = output_file or tempfile.mktemp(prefix="trent_chat_", suffix=".json")
+    if output_file:
+        out_path = output_file
+    else:
+        with tempfile.NamedTemporaryFile(
+            prefix="trent_chat_", suffix=".json", delete=False
+        ) as created:
+            out_path = created.name
     content_chunks: list[str] = []
     returned_thread_id: str | None = thread_id
     expiration_warning: str | None = None

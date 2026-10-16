@@ -4,6 +4,10 @@
 """Tests for the stdlib Trent API client header-inspection logic."""
 
 import io
+import json
+import os
+import stat
+import tempfile
 import urllib.error
 from unittest.mock import MagicMock, patch
 
@@ -250,6 +254,43 @@ class TestChatExpirationWarning:
             result = trent_client.chat("hi", output_file=str(out_file))
         assert result["error"] is True
         assert "expiration_warning" not in result
+
+
+class TestChatDefaultOutputFile:
+    def _sse_response(self):
+        resp = MagicMock()
+        resp.__iter__.return_value = iter([b'data: {"content": "hello"}\n', b"data: [DONE]\n"])
+        resp.headers = {}
+        resp.__enter__.return_value = resp
+        resp.__exit__.return_value = False
+        return resp
+
+    def test_default_output_file_is_created_atomically(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+        def _refuse_mktemp(*args, **kwargs):
+            raise AssertionError("tempfile.mktemp names a file without creating it")
+
+        monkeypatch.setattr(tempfile, "mktemp", _refuse_mktemp)
+        with patch("urllib.request.urlopen", return_value=self._sse_response()):
+            result = trent_client.chat("hi")
+
+        out_path = result["output_file"]
+        assert os.path.dirname(out_path) == str(tmp_path)
+        assert os.path.basename(out_path).startswith("trent_chat_")
+        assert out_path.endswith(".json")
+        assert stat.S_IMODE(os.stat(out_path).st_mode) == 0o600
+        with open(out_path) as f:
+            assert json.load(f) == {"content": "hello", "thread_id": None}
+
+    def test_caller_output_file_is_used_as_given(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("TRENT_API_KEY", "trent_test_key")
+        out_file = tmp_path / "mine.json"
+        with patch("urllib.request.urlopen", return_value=self._sse_response()):
+            result = trent_client.chat("hi", output_file=str(out_file))
+        assert result["output_file"] == str(out_file)
+        assert json.loads(out_file.read_text())["content"] == "hello"
 
 
 if __name__ == "__main__":
