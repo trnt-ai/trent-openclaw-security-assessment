@@ -1,15 +1,15 @@
 # Trent OpenClaw Security Assessment — deprecated
 
-**This skill is retired.** Its API endpoints are gone and its API keys are
-revoked, so the audit it ran no longer works. The ClawHub listing is hidden and
-this repository is archived. The last working release is tag `1.4.0`; its README,
-code and tests stay in git history.
+**This skill is retired.** The service it talked to has been shut down, so the
+audit it ran no longer works. The ClawHub listing is hidden and this repository is
+archived. The last working release is tag `1.4.0`; its README, code and tests stay
+in git history. Version 2.0.1 on ClawHub is a notice only: SKILL.md, LICENSE and
+NOTICE, no code.
 
 ## What to use instead
 
-Trent still secures OpenClaw deployments. The checks this skill ran now live in
-Trent's main security engineer, which reads your agent's code and configuration
-from a repository rather than from a local skill.
+Trent still secures OpenClaw deployments through its main security engineer,
+which reads an agent's code and configuration from a repository.
 
 1. **Scan your OpenClaw agent repository.** Sign in at [app.trent.ai](https://app.trent.ai)
    (or [app.eu.trent.ai](https://app.eu.trent.ai) in the EU), connect the GitHub

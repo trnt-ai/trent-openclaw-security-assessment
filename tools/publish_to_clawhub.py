@@ -4,12 +4,14 @@
 
 """Publish the trentclaw skill to ClawHub.
 
-Stages only SKILL.md, scripts/openclaw_trent/, LICENSE and NOTICE into a temp
-directory and publishes that. Tests, tools and docs are never sent.
+Stages SKILL.md, LICENSE and NOTICE, plus scripts/openclaw_trent/ unless
+--skill-only is given, into a temp directory and publishes that. Tests, tools
+and docs are never sent.
 
 Usage:
-    python tools/publish_to_clawhub.py --dry-run    # preview the bundle
-    python tools/publish_to_clawhub.py              # publish
+    python tools/publish_to_clawhub.py --dry-run               # preview the bundle
+    python tools/publish_to_clawhub.py --skill-only --dry-run  # notice only, no code
+    python tools/publish_to_clawhub.py                         # publish
 
 Prerequisites:
     npm i -g clawhub
@@ -63,6 +65,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Publish the trentclaw skill to ClawHub.")
     parser.add_argument("--dry-run", action="store_true", help="Preview the bundle only")
     parser.add_argument("--changelog", default="", help="Changelog text for this version")
+    parser.add_argument(
+        "--skill-only",
+        action="store_true",
+        help="Bundle SKILL.md, LICENSE and NOTICE only; leave scripts/ out",
+    )
     args = parser.parse_args()
 
     for required in (SKILL_SRC, SCRIPTS_SRC, *(REPO_ROOT / f for f in LICENSE_FILES)):
@@ -80,13 +87,16 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="trent-skill-") as tmp_dir:
         staging = Path(tmp_dir)
         shutil.copy2(SKILL_SRC, staging / "SKILL.md")
-        file_count = _copy_scripts(staging)
+        file_count = 0 if args.skill_only else _copy_scripts(staging)
         for lic_name in LICENSE_FILES:
             shutil.copy2(REPO_ROOT / lic_name, staging / lic_name)
 
         print(f"Publishing {SLUG} v{version} to ClawHub")
         print(f"  SKILL.md:  {SKILL_SRC}")
-        print(f"  scripts/:  {SCRIPTS_SRC} ({file_count} files)")
+        if args.skill_only:
+            print("  scripts/:  left out (--skill-only)")
+        else:
+            print(f"  scripts/:  {SCRIPTS_SRC} ({file_count} files)")
         print(f"  license:   {', '.join(LICENSE_FILES)}")
         print(f"  tags:      {TAGS}\n")
 

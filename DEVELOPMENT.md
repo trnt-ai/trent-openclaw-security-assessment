@@ -36,3 +36,6 @@ npm i -g clawhub && clawhub login            # as trent-ai-release
 python tools/publish_to_clawhub.py --dry-run # preview the bundle
 python tools/publish_to_clawhub.py --changelog "Deprecated: the skill is retired"
 ```
+
+`--skill-only` leaves `scripts/` out of the bundle. The 2.0.1 tombstone is published
+that way, so the registry's security scan has no code to review.
