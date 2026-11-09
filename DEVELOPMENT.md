@@ -19,11 +19,8 @@ request (see `.github/workflows/test.yml`).
 
 ## Source of truth
 
-**This repository is the canonical source of truth** for `SKILL.md`, `scripts/`, and
-`tests/`. Make changes here, and let CI (lint + tests) gate them.
-
-Trent AI maintains an internal mirror of this plugin inside its monorepo
-(`plugins/openclaw-trent-plugin/`) that is used **only** to publish the skill to
-ClawHub. That mirror is synced **from** this repo — never the other way around — by a
-one-way helper (`tools/sync_from_public.sh` in the monorepo). Changes should not
-originate in the mirror.
+This repository is the canonical source for `SKILL.md`, `scripts/`, and `tests/`.
+It is archived: the skill is deprecated and version 2.0.0 is the final release.
+Earlier releases were published to ClawHub from a mirror in Trent's monorepo;
+that mirror has been removed. The 2.0.0 tombstone is published from this repo with
+`clawhub publish`.
